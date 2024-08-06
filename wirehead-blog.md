@@ -1,4 +1,7 @@
-# Scaling Synthetic Data Generation with Wirehead
+<h1 onclick="document.getElementById('darkmode-toggle').click();">
+Scaling Synthetic Data Generation with Wirehead
+</h1>
+
 
 ---
 > REDACTED
@@ -9,7 +12,7 @@
 
 There is one unchanging constant in machine learning: "data is king." But what happens when you work in a field where the king doesn't always want to get out of bed every morning?
 
-Welcome to neuroimaging, where data is not only hard to come by, but also requries a ton of space[^1].
+Welcome to neuroimaging, where data is not only hard to come by, but also requires a ton of space[^1].
 
 Many have stood up to challenge this lack of data by inventing methods to generate synthetic data -- SynthSeg, SynthStrip, Synth, etc. They work really well[^2], but it has
 
@@ -18,6 +21,23 @@ Many have stood up to challenge this lack of data by inventing methods to genera
 <p align="center">.
 
 ---
+
+I. [Issues with synthetic data generators](#i-issues)
+
+II. [Wirehead Tutorial](#ii-tldr-how-to-solve-this-problem-without-thinking-about-it)
+
+III. [Configuration](#iii-configuration)
+
+IV. [Deployment](#iv-deployment)
+
+V. [Case study, SynthSeg](#v-case-study--synthseg)
+
+VI. [Advanced tech](#vi-advanced-userland-tech)
+
+VII. [Wirehead Internals](#vii-wirehead-internals)
+
+---
+
 
 <br>
 
@@ -140,7 +160,7 @@ pip install wirehead
 ### 4. Doing a test run
 
 The unit test lives in examples/unit
-```
+```bash
 git clone git@github.com:neuroneural/wirehead.git
 cd wirehead/examples/unit
 ```
@@ -163,7 +183,7 @@ print("MongoDB is accessible" if MongoClient(
 ```
 
 Run the test
-```
+```bash
 chmod +x test.sh
 ./test.sh
 ```
@@ -190,14 +210,14 @@ All tests passed successfully!
 ### 1. config.yaml
 
 All three of these scripts source a single config.yaml file, which consists of:
-```
+```yaml
 MONGOHOST: "localhost"          # hostname or ip of node hosting mongodb
 DBNAME: "unit-test"             # name of database inside mongodb
 SWAP_CAP: 10                    # max size for write/read collection
 ```
 
 as well as some advanced configs (explained in a later section)
-```
+```yaml
 SAMPLE: ["data", "label"]       # string key associated with your samples
 WRITE_COLLECTION: "write"       # name of write collecion on mongodb 
 READ_COLLECTION: "read"         # name of read collection 
@@ -215,7 +235,7 @@ This is the simplest, and doesn't have to be changed if you're running it as a s
 WireheadManager doesn't consume much compute, and thus can be deployed anywhere you want.
 
 The only thing you need to specify is the path to your config file (in this case, "config.yaml")
-```
+```python
 from wirehead import WireheadManager
 
 if __name__ == "__main__":
@@ -230,7 +250,8 @@ This script is provides a simple way to fetch a single sample from Wirehead
 We provide two kinds of datasets for fetching dataL MongoheadDataset (dictionary-like) and MongoTupleheadDataset (tuple-like)
 
 Similar to manager.py, it's pretty much plug and play, and you can insert this into anywhere you'd like in your regular training script. the only thing you need to specify is the path to your config file (again, it is "config.yaml" in this example)
-```
+
+```python
 import torch
 from wirehead import MongoheadDataset, MongoTupleheadDataset
 
@@ -248,7 +269,7 @@ sample, label = data[0], data[1]
 ### 4. generator.py
 
 This is the heart of the operation, and where some explanation has to be done:
-```
+```python
 import numpy as np
 from wirehead import WireheadGenerator 
 
@@ -270,7 +291,7 @@ if __name__ == "__main__":
 Like the manager and dataset, you need to specify your config_path ("config.yaml" in this example)
 
 But one thing that's different, is that now you also have to specify a [generator function](https://wiki.python.org/moin/Generators) which **yields** a tuple containing your data. In this case, that generator looks like:
-```
+```python
 def create_generator():
     while True: 
         img = np.random.rand(256,256,256)
@@ -282,7 +303,7 @@ Wirehead has to serialize the data before sending it off, and in this case we de
 
 
 Then, all you have to do is plug an instance of your generator function, and the path to your config file into WireheadGenerator
-```
+```python
 brain_generator     = create_generator()
 wirehead_runtime    = WireheadGenerator(
     generator = brain_generator,
@@ -291,13 +312,13 @@ wirehead_runtime    = WireheadGenerator(
 ```
 
 And then press play (this runs an infinite loop)
-```
+```python
 wirehead_runtime.run_generator()
 ```
 
 
 If you'd prefer to generate only N samples instead of running an infinite loop, you can specify that in your generator function:
-```
+```python
 N = 10000
 def create_generator():
     for _ in range(N):  # generate 10000 samples
@@ -542,8 +563,12 @@ done
 
 **drum rolls please** here's the numbers:
 ```bash
-
+Manager: Time: 1722969207.606956 Generated samples so far 30000
+Manager: Time: 1722969256.0353918 Generated samples so far 31000
+Manager: Time: 1722969305.0466542 Generated samples so far 32000
 ```
+
+So an average of about 0.049 seconds per sample or 20.4 samples per second. So about a 32x speedup compared to baseline, and a LINEAR 8x speedup compared to the process parallel example.
 
 <br>
 
@@ -696,6 +721,12 @@ So we didn't, and instead relied on some battle hardened enterprise software. En
 
 So all we have to do now is to write those three components, and let MongoDB handle the ugly details of distributed systems reliability. (not really true, we still have to do some careful distributed system design)
 
+Some terminology before we dive into the explanations:
+
+- swap time: refers to the operations and time during which swap from write to read happens.
+- read time: refers to the operations and time during which a read operation happens.
+- chunkified: turning a large file of N bytes into N / CHUNKSIZE chunks 
+
 Here are the parts that we wrote, and a brief explanation of how they work.
 
 ### 1. Put
@@ -714,9 +745,51 @@ def generate_and_insert(self):
         self.push_chunks(chunks)
 ```
 
-- What is index?
-- What is chunkifying doing?
-- Pushing, and guardrails
+For every sample created by a generator, the following steps are applied to that data
+
+1. A corresponding index is fetched for the sample
+2. The data is turned into chunks of CHUNKSIZE megabytes
+3. The chunks are pushed in order into MongoDB 
+
+#### a. What is index?
+
+```python
+def get_current_idx(self):
+    """Get current index of sample in write collection"""
+    dbc = self.db[self.collectionc]
+    counter_doc = dbc.find_one_and_update(
+        {"_id": "uniqueFieldCounter"},
+        {"$inc": {"sequence_value": 1}},
+        return_document=ReturnDocument.BEFORE,
+    )
+    return counter_doc["sequence_value"]
+```
+
+Index is fetched from the counter collection inside our MongoDB collection. During fetch time, it both grabs the index, and also atomically increments the counter collection.
+
+This ensures that every generated sample will have a unique id before being pushed into the database. This id will be the same id that ```__getitem__``` fetched by the dataset class.
+
+#### b. What is chunkifying doing?
+
+```python
+chunks = []
+        binobj = data
+        kinds = self.sample
+        for i, kind in enumerate(kinds):
+            chunks += list(
+                chunk_binobj(
+                    tensor2bin(torch.from_numpy(binobj[i])),
+                    index,
+                    kind,
+                    self.chunksize,
+                )
+            )
+        return chunks
+```
+
+Because MongoDB has a collection size cap of [16MB](https://www.mongodb.com/docs/v5.2/reference/limits/), we have to chunkify our data into multiple chunks. The size of our chunks is determined by the CHUNKSIZE variable in config.yaml.
+
+Note that because our data is getting chunkified, we'll have to reassemble them at read time.
 
 ### 2. Get
 ```python
@@ -751,9 +824,13 @@ def __getitem__(self, batch):
     return results
 ```
 
-- Data integrity (so about them partial chunks)
-- Batched reads 
-- Data recreation
+In short, to fetch a batch of data from Wirehead, the following operations are executed:
+
+1. Get chunk indeces of samples from collection given index
+2. Create a batch to store samples into
+3. Fetch chunks from chunk indeces fetched in # 1.
+4. >>>> Recreate data from chunks <<<<
+
 
 ### 3. Swap
 ```python
@@ -778,20 +855,79 @@ def swap(self, generated):
 
     # 4. Go through collection, and reindex chunks into contiguous sections
     #       this operation is O(swap_cap)
-    self.verify_collection_integrity(self.db[self.collectiont])
+    #    Also verify that the collection is uncorrupted while you're at it
+    if self.verify_collection_integrity(self.db[self.collectiont]):
+        # 5. Atomically replace read collection with temp collection
+        self.db[self.collectiont].rename(self.collectionr, dropTarget=True)
 
-    # 5. Atomically replace read collection with temp collection
-    self.db[self.collectiont].rename(self.collectionr, dropTarget=True)
+        # 6. Flag the database as having swapped once and ready to be read
+        self.db["status"].insert_one({"swapped": True})
 
-    # 6. Flag the database as having swapped once and ready to be read
-    self.db["status"].insert_one({"swapped": True})
-
-    return generated 
+        return generated 
+    else: # if collection is corrupted
+        print("Manager: Corrupted collection detected, skipping swap")
+        return generated 
 ```
 
-- How swaps happen instantaneously
-- How swaps happen safely
-- How swap latency doesn't matter (push back latency) (maybe insert a cute figure here)
+Once a SWAP_CAP number of samples is in the write collection, a swap is executed which replaces the current read collection with a fresh batch of samples from the write collection. The following operations happen in order:
+
+1. Rename the write collection to a temporary collection for processing.
+2. Reset the counter collection, setting push indices to 0 and resuming.
+3. Remove excess chunks from the temporary collection, keeping only up to the swap cap limit.
+4. Reindex chunks in the temporary collection into contiguous sections (O(swap_cap) operation). Also verifies that the write collection doesn't have any incomplete samples.
+5. Atomically replace the read collection with the temporary collection.
+6. Flag the database as having swapped once and ready to be read.
+
+#### a. How swaps happen 'instantaneously'
+
+During swap time, the way that data 'moves' from the write collection to the read collection isn't by actually moving any data.
+
+Instead, what we do is we atomically rename the write collection **into** the read collection, while simultaneously dropping the read collection. This operation happens instantaneously.
+
+
+#### b. How swaps happen safely
+
+One thing to note though, is that ```self.db[self.collectiont].rename(self.collectionr, dropTarget=True)``` only has **partial** atomicity -- meaning that the renaming operation and dropTarget operation are independently atomic -- there is a few milisecond gap during which there is no read collection.
+
+To rememdy this, we've also implemented some error handling on the Dataset class to make it able to refetch should a swap happen mid fetch.
+
+```python
+def retry_on_eof_error(retry_count, verbose=False):
+    """
+    Error handling for reads that happen mid swap
+    """
+
+    def decorator(func):
+
+        def wrapper(self, batch, *args, **kwargs):
+            myException = Exception    # Default Exception if not overwritten
+            for attempt in range(retry_count):
+                try:
+                    return func(self, batch, *args, **kwargs)
+                except (
+                        EOFError,
+                        OperationFailure,
+                ) as exception:    # Specifically catching EOFError
+                    if self.keeptrying:
+                        if verbose:
+                            print(
+                                f"EOFError caught. Retrying {attempt+1}/{retry_count}"
+                            )
+                        time.sleep(1)
+                        continue
+                    else:
+                        raise exception
+            raise myException("Failed after multiple retries.")
+
+        return wrapper
+
+    return decorator
+
+@retry_on_eof_error(retry_count=3, verbose=True)
+def __getitem__(self, batch):
+# rest of the normal __getitem__ function
+```
+
 
 <br>
 
