@@ -12,9 +12,9 @@ Scaling Synthetic Data Generation with Wirehead
 
 There is one unchanging constant in machine learning: "data is king." But what happens when you work in a field where the king doesn't always want to get out of bed every morning?
 
-Welcome to neuroimaging, where data is not only hard to come by, but also requires a ton of space[^1].
+Welcome to neuroimaging, where data is not only hard to come by, impossible to get manually labeled[^1], but also requires a ton of space[^2].
 
-Many have stood up to challenge this lack of data by inventing methods to generate synthetic data -- SynthSeg, SynthStrip, Synth, etc. They work really well[^2], but it has
+Many have stood up to challenge this lack of data by inventing methods to generate synthetic data -- SynthSeg, SynthStrip, Synth, etc. They work really well[^3], but it has
 
 <p align="center">.
 <p align="center">.
@@ -48,11 +48,11 @@ VII. [Wirehead Internals](#vii-wirehead-internals)
 > If you'd like to skip ahead to Wirehead's internal workings, go to section VII.
 ---
 
-In late 2023, we at TReNDS attempted to make use of one such generator, [SynthSeg](https://arxiv.org/abs/2107.09559), to replicate the original results by training a MeshNet on 300,000 synthetic samples[^3]. However, early into the experimentation process, we noted three key things:
+In late 2023, we at TReNDS attempted to make use of one such generator, [SynthSeg](https://arxiv.org/abs/2107.09559), to replicate the original results by training a MeshNet, our parameter-efficient model that's very different from UNet used in the reference paper, on 300,000 synthetic samples[^3]. However, early into the experimentation process, we noted three key things:
 
 1. **Generation time** was quite significant (2 seconds per sample on our A40). Generating that many samples using their setup (train -> generate) would have taken us **hundreds of hours.**
 2. **Data size was massive**, the papers report training on 300,000 samples, which would have been 91 terabytes at 32 bit precision 
-3. **Hardware was greatly underutilized**. glancing at nvtop showed us that our gpus would be barely used during sample generation, before peaking for about 5 seconds while training on a new batch. On average, we got just **around 30% GPU utilization**
+3. **Hardware was greatly underutilized**. glancing at nvtop showed us that our GPUs would be barely used during sample generation, before peaking for about 5 seconds while training on a new batch. On average, we got just **around 30% GPU utilization**
 
 
 We could solve these issues by deploying the generator in parallel, but that posed its own set of issues:
@@ -202,7 +202,7 @@ All tests passed successfully!
 
 ![wirehead state](https://raw.githubusercontent.com/spikedoanz/public/master/wirehead/config.png)
 
->Deploying wirehead involves 3 main scripts (or utilities): A generator(s) (generator.py) a cache manager (manager.py) and a data fetcher (loader.py)
+>Deploying wirehead involves 3 main scripts (or utilities): A generator(s) (generator.py) a cache manager (manager.py) and a data fetcher (loader.py). In fact, loader is your favorite model training script and is fully decoupled from wirehead as long as you use out Dataset class (provided, but also part of our other package [mindfultensors](https://pypi.org/project/mindfultensors/)).
 >
 >All examples in this section can be found in wirehead/examples/unit
 ---
@@ -245,11 +245,11 @@ if __name__ == "__main__":
 
 ### 3. loader.py
 
-This script is provides a simple way to fetch a single sample from Wirehead
+This script provides a simple way, an example really, to fetch a single sample from Wirehead
 
-We provide two kinds of datasets for fetching dataL MongoheadDataset (dictionary-like) and MongoTupleheadDataset (tuple-like)
+We provide two kinds of datasets for fetching data MongoheadDataset (dictionary-like) and MongoTupleheadDataset (tuple-like).
 
-Similar to manager.py, it's pretty much plug and play, and you can insert this into anywhere you'd like in your regular training script. the only thing you need to specify is the path to your config file (again, it is "config.yaml" in this example)
+Similar to `manager.py`, it's pretty much plug and play, and you can insert this into anywhere you'd like in your regular training script. The only thing you need to specify is the path to your config file (again, it is "config.yaml" in this example)
 
 ```python
 import torch
@@ -932,7 +932,8 @@ def __getitem__(self, batch):
 <br>
 
 [^1]: for a typical image of shape 256x256x256, at 32 bits per voxel, that's 64 megabytes
-[^2]: https://arxiv.org/abs/2107.09559
+[^2]: unless you want to pay about $300/hour for a time of a radiologist that has better things to do than carefully assigning $256^3$ voxels to 18 classes
+[^3]: https://arxiv.org/abs/2107.09559
 [^4]: see distributed computing
 [^5]: see circular buffers
 [^6]: see caches
