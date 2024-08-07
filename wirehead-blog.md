@@ -54,6 +54,7 @@ In late 2023, we at TReNDS attempted to make use of one such generator, [SynthSe
 2. **Data size was massive**, the papers report training on 300,000 samples, which would have been 91 terabytes at 32 bit precision 
 3. **Hardware was greatly underutilized**. glancing at nvtop showed us that our GPUs would be barely used during sample generation, before peaking for about 5 seconds while training on a new batch. On average, we got just **around 30% GPU utilization**
 
+:warning: **TODO:** INSERT NVTOP GIF HERE PLEASE.
 
 We could solve these issues by deploying the generator in parallel, but that posed its own set of issues:
 - **Where would we store the data?** We still only had that much space on the cluster, and storing all of them at once would be infeasible. Some kind of **cache** was necessary
@@ -570,6 +571,8 @@ Manager: Time: 1722969305.0466542 Generated samples so far 32000
 
 So an average of about 0.049 seconds per sample or 20.4 samples per second. So about a 32x speedup compared to baseline, and a LINEAR 8x speedup compared to the process parallel example.
 
+:warning: **TODO:** This is a good location for the 4 hour training plot from your paper
+
 <br>
 
 ---
@@ -592,7 +595,7 @@ So an average of about 0.049 seconds per sample or 20.4 samples per second. So a
 >Accommodating all the different ways a generator could be handled, or deployed, would have significantly bloated our code. 
 ---
 
-However, that doesn't mean we're going to leave you out for dry.
+However, that doesn't mean we're going to leave you out to dry.
 
 Here are some advanced tech that we've found during testing to make your life a lot easier while scaling your synthetic data generators:
 
@@ -770,7 +773,7 @@ Index is fetched from the counter collection inside our MongoDB collection. Duri
 This ensures that every generated sample will have a unique id before being pushed into the database. This id will be the same id that ```__getitem__``` fetched by the dataset class.
 
 #### b. What is chunkifying doing?
-
+:warning: **TODO** Fix code alignment: why binobj = data line starts way to the right?
 ```python
 chunks = []
         binobj = data
@@ -826,9 +829,9 @@ def __getitem__(self, batch):
 
 In short, to fetch a batch of data from Wirehead, the following operations are executed:
 
-1. Get chunk indeces of samples from collection given index
+1. Get chunk indices of samples from collection given index
 2. Create a batch to store samples into
-3. Fetch chunks from chunk indeces fetched in # 1.
+3. Fetch chunks from chunk indices fetched in # 1.
 4. >>>> Recreate data from chunks <<<<
 
 
