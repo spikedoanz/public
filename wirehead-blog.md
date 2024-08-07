@@ -12,9 +12,9 @@ Scaling Synthetic Data Generation with Wirehead
 
 There is one unchanging constant in machine learning: "data is king." But what happens when you work in a field where the king doesn't always want to get out of bed every morning?
 
-Welcome to neuroimaging, where data is not only hard to come by, impossible to get manually labeled[^1], but also requires a ton of space[^2].
+Welcome to neuroimaging, where data is not only hard to come by, but also requires a ton of space[^1].
 
-Many have stood up to challenge this lack of data by inventing methods to generate synthetic data -- SynthSeg, SynthStrip, Synth, etc. They work really well[^3], but it has
+Many have stood up to challenge this lack of data by inventing methods to generate synthetic data -- SynthSeg, SynthStrip, Synth, etc. They work really well[^2], but it has
 
 <p align="center">.
 <p align="center">.
@@ -48,16 +48,15 @@ VII. [Wirehead Internals](#vii-wirehead-internals)
 > If you'd like to skip ahead to Wirehead's internal workings, go to section VII.
 ---
 
-In late 2023, we at TReNDS attempted to make use of one such generator, [SynthSeg](https://arxiv.org/abs/2107.09559), to replicate the original results by training a MeshNet, our parameter-efficient model that's very different from UNet used in the reference paper, on 300,000 synthetic samples[^3]. However, early into the experimentation process, we noted three key things:
+In late 2023, we at TReNDS attempted to make use of one such generator, [SynthSeg](https://arxiv.org/abs/2107.09559), to replicate the original results by training a MeshNet on 300,000 synthetic samples[^3]. However, early into the experimentation process, we noted three key things:
 
 1. **Generation time** was quite significant (2 seconds per sample on our A40). Generating that many samples using their setup (train -> generate) would have taken us **hundreds of hours.**
-2. **Data size was massive**, the papers report training on 300,000 samples, which would have been 91 terabytes at 32 bit precision 
-3. **Hardware was greatly underutilized**. glancing at nvtop showed us that our GPUs would be barely used during sample generation, before peaking for about 5 seconds while training on a new batch. On average, we got just **around 30% GPU utilization**
+2. **Data size was massive**, the papers report training on 300,000 samples, which would have been 91 terabytes at 32 bit precision .
+3. **Hardware was greatly underutilized**. glancing at nvtop showed us that our gpus would be barely used during sample generation, before peaking for about 5 seconds while training on a new batch. On average, we got just **around 30% GPU utilization**.
 
-:warning: **TODO:** INSERT NVTOP GIF HERE PLEASE.
 
 We could solve these issues by deploying the generator in parallel, but that posed its own set of issues:
-- **Where would we store the data?** We still only had that much space on the cluster, and storing all of them at once would be infeasible. Some kind of **cache** was necessary
+- **Where would we store the data?** We still only had that much space on the cluster, and storing all of them at once would be infeasible. Some kind of **cache** was necessary.
 - **How would we coordinate these distributed generators?** We had SLURM, and could spin up 20 generators on the spot whenever we wanted, but it's nontrivial to figure out how to make this process sync up with the training process.
 - **How would we maintain high GPU utilization for training?** The problem was clear -- Our GPUs would idle if they didn't have a sample to train on. Perfectly syncing up the throughput of generation to training is practically impossible, and overloading the training job with more samples than it needs would be wasteful of compute. So a workaround had to be figured out.
 
@@ -108,7 +107,7 @@ sudo systemctl stop mongod
 
 #### b. Quick MongoDB Setup ([MacOS](https://www.mongodb.com/docs/manual/tutorial/install-mongodb-on-os-x/)):
 
-Install [homebrew](https://brew.sh/) if you haven't
+Install [homebrew](https://brew.sh/) if you haven't:
 ```
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 ```
@@ -131,7 +130,7 @@ brew services stop mongodb-community@7.0
 
 #### c. Singularity setup
 
-Refer to [this excellent guide](https://medium.com/@tholaday777/run-a-mongodb-docker-image-as-a-singularity-container-service-e68322df7abc) from Tristan Holoday 
+Refer to [this excellent guide](https://medium.com/@tholaday777/run-a-mongodb-docker-image-as-a-singularity-container-service-e68322df7abc) from Tristan Holoday.
 
 
 ### 2. Python environment setup
@@ -160,20 +159,20 @@ pip install wirehead
 
 ### 4. Doing a test run
 
-The unit test lives in examples/unit
+The unit test lives in examples/unit:
 ```bash
 git clone git@github.com:neuroneural/wirehead.git
 cd wirehead/examples/unit
 ```
 
-Configure the config.yaml file
+Configure the config.yaml file:
 ```yaml
 MONGOHOST: "localhost" # hostname or ip of node hosting mongodb
 DBNAME: "unit-test"    # name of database inside mongodb
 SWAP_CAP: 10           # max size for write/read collection
 ```
 
-**Important note:** If you're running MongoDB on a separate computer, you should make sure that it is accessible to wherever you've deployed wirehead. (This usually means contact your sysadmins). Verify with
+**Important note:** If you're running MongoDB on a separate computer, you should make sure that it is accessible to wherever you've deployed wirehead. (This usually means contact your sysadmins). Verify with:
 ```python
 from pymongo import MongoClient
 # replace with hostname=localhost and port=27017 for defaults on a local instance
@@ -203,9 +202,9 @@ All tests passed successfully!
 
 ![wirehead state](https://raw.githubusercontent.com/spikedoanz/public/master/wirehead/config.png)
 
->Deploying wirehead involves 3 main scripts (or utilities): A generator(s) (generator.py) a cache manager (manager.py) and a data fetcher (loader.py). In fact, loader is your favorite model training script and is fully decoupled from wirehead as long as you use out Dataset class (provided, but also part of our other package [mindfultensors](https://pypi.org/project/mindfultensors/)).
+>Deploying wirehead involves 3 main scripts (or utilities): A generator(s) (generator.py) a cache manager (manager.py) and a data fetcher (loader.py).
 >
->All examples in this section can be found in wirehead/examples/unit
+>All examples in this section can be found in wirehead/examples/unit.
 ---
 
 ### 1. config.yaml
@@ -217,7 +216,7 @@ DBNAME: "unit-test"             # name of database inside mongodb
 SWAP_CAP: 10                    # max size for write/read collection
 ```
 
-as well as some advanced configs (explained in a later section)
+as well as some advanced configs (explained in a later section).
 ```yaml
 SAMPLE: ["data", "label"]       # string key associated with your samples
 WRITE_COLLECTION: "write"       # name of write collecion on mongodb 
@@ -227,7 +226,7 @@ TEMP_COLLECTION: "temp"         # name of temporary collection for movement ops
 CHUNKSIZE: 10                   # size of chunks in MB for chunking data
 ```
 
-In order of increasing complexity, here's how to configure each component of wirehead
+In order of increasing complexity, here's how to configure each component of wirehead:
 
 ### 2. manager.py
 
@@ -235,7 +234,7 @@ This is the simplest, and doesn't have to be changed if you're running it as a s
 
 WireheadManager doesn't consume much compute, and thus can be deployed anywhere you want.
 
-The only thing you need to specify is the path to your config file (in this case, "config.yaml")
+The only thing you need to specify is the path to your config file (in this case, "config.yaml").
 ```python
 from wirehead import WireheadManager
 
@@ -246,11 +245,11 @@ if __name__ == "__main__":
 
 ### 3. loader.py
 
-This script provides a simple way, an example really, to fetch a single sample from Wirehead
+This script is provides a simple way to fetch a single sample from Wirehead.
 
-We provide two kinds of datasets for fetching data MongoheadDataset (dictionary-like) and MongoTupleheadDataset (tuple-like).
+We provide two kinds of datasets for fetching dataL MongoheadDataset (dictionary-like) and MongoTupleheadDataset (tuple-like).
 
-Similar to `manager.py`, it's pretty much plug and play, and you can insert this into anywhere you'd like in your regular training script. The only thing you need to specify is the path to your config file (again, it is "config.yaml" in this example)
+Similar to manager.py, it's pretty much plug and play, and you can insert this into anywhere you'd like in your regular training script. the only thing you need to specify is the path to your config file (again, it is "config.yaml" in this example).
 
 ```python
 import torch
@@ -289,7 +288,7 @@ if __name__ == "__main__":
     wirehead_runtime.run_generator()
 ```
 
-Like the manager and dataset, you need to specify your config_path ("config.yaml" in this example)
+Like the manager and dataset, you need to specify your config_path ("config.yaml" in this example).
 
 But one thing that's different, is that now you also have to specify a [generator function](https://wiki.python.org/moin/Generators) which **yields** a tuple containing your data. In this case, that generator looks like:
 ```python
@@ -300,10 +299,10 @@ def create_generator():
         yield (img, lab)
 ```
 
-Wirehead has to serialize the data before sending it off, and in this case we decided to use numpy ndarrays. If you instead wanted to use torch tensors or some other data type, make sure they're [serializable](https://docs.python.org/3/library/pickle.html) and live in the CPU before yielding them
+Wirehead has to serialize the data before sending it off, and in this case we decided to use numpy ndarrays. If you instead wanted to use torch tensors or some other data type, make sure they're [serializable](https://docs.python.org/3/library/pickle.html) and live in the CPU before yielding them.
 
 
-Then, all you have to do is plug an instance of your generator function, and the path to your config file into WireheadGenerator
+Then, all you have to do is plug an instance of your generator function, and the path to your config file into WireheadGenerator.
 ```python
 brain_generator     = create_generator()
 wirehead_runtime    = WireheadGenerator(
@@ -312,7 +311,7 @@ wirehead_runtime    = WireheadGenerator(
 )
 ```
 
-And then press play (this runs an infinite loop)
+And then press play (this runs an infinite loop).
 ```python
 wirehead_runtime.run_generator()
 ```
@@ -499,11 +498,22 @@ Manager: Time: 1722892570.7747226 Generated samples so far 300
 Manager: Time: 1722892734.1165183 Generated samples so far 400
 ```
 
-Subtracting time between swaps, we get on average 162 seconds per 100 samples, or 1.62 seconds per sample (0.62 samples per second). This is now our baseline
+Subtracting time between swaps, we get on average 162 seconds per 100 samples, or 1.62 seconds per sample (0.62 samples per second). This is now our baseline.
+
+For reference, let's also check out the hardware utilization plots, this is [nvitop](https://github.com/XuehaiPan/nvitop) btw
+
+![wh one process](https://raw.githubusercontent.com/spikedoanz/public/master/wirehead/1process-wirehead.gif)
+
+Notice anything?
+
+- GPU util: bottom right plot: Spotty, varying from 0-80%, averaging 30%. -- WEAK
+- GPU mem:  top right plot. stable 11%. -- WEAK
+- CPU util: top left plot ~9% -- WEAK
+- CPU mem: bottom left plot 9.4 GB -- WEAK
 
 ## 2. Process parallelism
 
-Surely, we can fit more processes on the same node, how about 8? We can do this by just launching 8 python processes in parallel in the terminal
+Surely, we can fit more processes on the same node, how about 8? We can do this by just launching 8 python processes in parallel in the terminal:
 
 ```bash
 #!/bin/bash
@@ -522,7 +532,7 @@ for pid in "${pids[@]}"; do
 done
 ```
 
-Doing this nets us these times
+Doing this nets us these times:
 
 ```bash
 Manager: Time: 1722891632.5399084 Generated samples so far 100
@@ -532,6 +542,17 @@ Manager: Time: 1722891749.7454906 Generated samples so far 400
 ```
 
 On average, we're getting about 39 seconds per 100 samples. This means the generator is going at 0.39 seconds per sample (aka 2.56 samples per second). This translates to a 4.1x speedup. Not quite linear, but SynthSeg is quite resource intensive so.
+
+Let's look at the hardware util plots again
+
+![wh eight process](https://raw.githubusercontent.com/spikedoanz/public/master/wirehead/8process-wirehead.gif)
+
+Notice anything?
+
+- GPU util: bottom right plot: > 90% utilization always -- STRONG
+- GPU mem:  top right plot. 77.7% -- STRONG
+- CPU util: ~23% -- STRONGER
+- CPU mem: 24 GB -- STRONG
 
 
 ## 3. Node paralellism
@@ -571,8 +592,6 @@ Manager: Time: 1722969305.0466542 Generated samples so far 32000
 
 So an average of about 0.049 seconds per sample or 20.4 samples per second. So about a 32x speedup compared to baseline, and a LINEAR 8x speedup compared to the process parallel example.
 
-:warning: **TODO:** This is a good location for the 4 hour training plot from your paper
-
 <br>
 
 ---
@@ -595,7 +614,7 @@ So an average of about 0.049 seconds per sample or 20.4 samples per second. So a
 >Accommodating all the different ways a generator could be handled, or deployed, would have significantly bloated our code. 
 ---
 
-However, that doesn't mean we're going to leave you out to dry.
+However, that doesn't mean we're going to leave you out for dry.
 
 Here are some advanced tech that we've found during testing to make your life a lot easier while scaling your synthetic data generators:
 
@@ -603,9 +622,9 @@ Here are some advanced tech that we've found during testing to make your life a 
 
 The first and most obvious one is to leverage many of the features that slurm provides out of the box to avoid having to having to heterogenize your generators.
 
-- [Slurm arrays](https://marcc-hpc.github.io/tutorials/shortcourse_jobarrays.html) for scheduling parallel jobs
+- [Slurm arrays](https://marcc-hpc.github.io/tutorials/shortcourse_jobarrays.html) for scheduling parallel jobs:
 
-Example
+Example:
 
 ```bash
 #!/bin/bash
@@ -618,7 +637,7 @@ Example
 python worker.py
 ```
 
-You can also use the slurm worker_id (the index from the example above) within the python runtime. This is useful for selecting 
+You can also use the slurm worker_id (the index from the example above) within the python runtime. This is useful for selecting:
 ```python
 import os
 worker_id = os.getenv("SLURM_ARRAY_TASK_ID", "0")
@@ -650,7 +669,7 @@ done
 ### 3. Benchmarks and debugging
 
 #### a. Fetching single samples
-You can do this by using the MongoheadDataset class
+You can do this by using the MongoheadDataset class:
 ``` 
 (venv) examples/unit § python
 Python 3.10.14 (main, Jul 12 2024, 17:45:26)
@@ -688,7 +707,7 @@ Generated samples:  how many samples generated in total so far
 Documents deleted:  how corrupted / incomplete samples were thrown away
 ```
 
-You can use these logs to get some figures for benchmarking
+You can use these logs to get some figures for benchmarking:
 ```python
 >>> 1722356737.930378-1722356716.8162937
 21.114      # seconds between swaps
@@ -705,16 +724,16 @@ You can use these logs to get some figures for benchmarking
 
 ## VII. Wirehead Internals
 
-> So we looked at these problem and realized: What we need is a **distributed[^4] circular[^5] cache[^6]**. We made one, and called it [Wirehead](https://github.com/neuroneural/wirehead)
+> So we looked at these problem and realized: What we need is a **distributed[^4] circular[^5] cache[^6]**. We made one, and called it [Wirehead](https://github.com/neuroneural/wirehead).
 ---
 
-Okay what do you need for a cache? You basically just need
-1. A way to **put** data in
-2. A way to **get** data out
-3. A way to **swap** old data with fresh data
+Okay what do you need for a cache? You basically just need:
+1. A way to **put** data in.
+2. A way to **get** data out.
+3. A way to **swap** old data with fresh data.
 
 Why a cache? And not some other strategy? Well, a circular cache:
-- **Eliminates the storage issue**. Using a cache means we toss out the data after we're done using it for training
+- **Eliminates the storage issue**. Using a cache means we toss out the data after we're done using it for training.
 - **Provides a convenient way to deal with the coordination issue**. Using a cache means that we have a way to hook up our many generators to our training job.
 - **Eliminates the issue of low GPU utilization**. Our training job would always have samples to train on.
 
@@ -722,13 +741,13 @@ Now the thing though, is that writing distributed systems software is [hard](htt
 
 So we didn't, and instead relied on some battle hardened enterprise software. Enter [MongoDB](https://www.mongodb.com/) -- distributed, non-blocking, and basically nuclear proof. It was exactly what we needed.
 
-So all we have to do now is to write those three components, and let MongoDB handle the ugly details of distributed systems reliability. (not really true, we still have to do some careful distributed system design)
+So all we have to do now is to write those three components, and let MongoDB handle the ugly details of distributed systems reliability. (not really true, we still have to do some careful distributed system design).
 
 Some terminology before we dive into the explanations:
 
 - swap time: refers to the operations and time during which swap from write to read happens.
 - read time: refers to the operations and time during which a read operation happens.
-- chunkified: turning a large file of N bytes into N / CHUNKSIZE chunks 
+- chunkified: turning a large file of N bytes into N / CHUNKSIZE chunks.
 
 Here are the parts that we wrote, and a brief explanation of how they work.
 
@@ -748,11 +767,11 @@ def generate_and_insert(self):
         self.push_chunks(chunks)
 ```
 
-For every sample created by a generator, the following steps are applied to that data
+For every sample created by a generator, the following steps are applied to that data:
 
-1. A corresponding index is fetched for the sample
-2. The data is turned into chunks of CHUNKSIZE megabytes
-3. The chunks are pushed in order into MongoDB 
+1. A corresponding index is fetched for the sample.
+2. The data is turned into chunks of CHUNKSIZE megabytes.
+3. The chunks are pushed in order into MongoDB.
 
 #### a. What is index?
 
@@ -773,7 +792,7 @@ Index is fetched from the counter collection inside our MongoDB collection. Duri
 This ensures that every generated sample will have a unique id before being pushed into the database. This id will be the same id that ```__getitem__``` fetched by the dataset class.
 
 #### b. What is chunkifying doing?
-:warning: **TODO** Fix code alignment: why binobj = data line starts way to the right?
+
 ```python
 chunks = []
         binobj = data
@@ -829,10 +848,10 @@ def __getitem__(self, batch):
 
 In short, to fetch a batch of data from Wirehead, the following operations are executed:
 
-1. Get chunk indices of samples from collection given index
-2. Create a batch to store samples into
-3. Fetch chunks from chunk indices fetched in # 1.
-4. >>>> Recreate data from chunks <<<<
+1. Get chunk indeces of samples from collection given index.
+2. Create a batch to store samples into.
+3. Fetch chunks from chunk indeces fetched in # 1.
+4. Reassemble data from chunks.
 
 
 ### 3. Swap
@@ -934,10 +953,9 @@ def __getitem__(self, batch):
 
 <br>
 
-[^1]: for a typical image of shape 256x256x256, at 32 bits per voxel, that's 64 megabytes
-[^2]: unless you want to pay about $300/hour for a time of a radiologist that has better things to do than carefully assigning $256^3$ voxels to 18 classes
-[^3]: https://arxiv.org/abs/2107.09559
-[^4]: see distributed computing
-[^5]: see circular buffers
-[^6]: see caches
+[^1]: a typical image of shape 256x256x256, at 32 bits per voxel is **64 megabytes**.
+[^2]: https://arxiv.org/abs/2107.09559
+[^4]: https://en.wikipedia.org/wiki/Distributed_computing
+[^5]: https://en.wikipedia.org/wiki/Circular_buffer
+[^6]: https://en.wikipedia.org/wiki/Cache_(computing)
 [^7]: We tried python's multiprocessing library but found the gains not worth it in exchange for their added cost to complexity.
